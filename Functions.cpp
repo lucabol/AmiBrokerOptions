@@ -16,6 +16,8 @@
 //
 ////////////////////////////////////////////////////
 
+#define _SCL_SECURE_NO_WARNINGS 1
+
 #include <math.h>
 #include <functional>
 #include <numeric>
@@ -189,9 +191,10 @@ AmiVar bsValueEuropean(int NumArgs, AmiVar* ArgsTable)
 	});
 }
 
+
 float calcHistVol(float* prices, int currentBar, int lookBack) {
 	auto startPrice	= currentBar - lookBack;
-	if(startPrice < 0) startPrice = 0;
+	if(startPrice < 0) return EMPTY_VAL;
 
 	auto sum	= std::accumulate(&prices[startPrice], &prices[currentBar], 0.0f);
 	auto mean	= sum / lookBack;
