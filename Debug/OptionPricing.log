@@ -1,9 +1,0 @@
-﻿  StdAfx.cpp
-  Plugin.cpp
-  OptionPricing.cpp
-  MyFunctions.cpp
-  Functions.cpp
-  Generating Code...
-     Creating library .\Debug\OptionPricing.lib and object .\Debug\OptionPricing.exp
-     Creating library .\Debug\OptionPricing.lib and object .\Debug\OptionPricing.exp
-  OptionPricing.vcxproj -> C:\Projects\AmiBrokerOptions\.\Debug\OptionPricing.dll
