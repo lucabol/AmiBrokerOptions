@@ -20,9 +20,9 @@
 #include "Plugin.h"
 
 // These are the only two lines you need to change
-#define PLUGIN_NAME "Option Pricing Plug-in"
-#define VENDOR_NAME "qbd.com"
-#define PLUGIN_VERSION 10000
+#define PLUGIN_NAME "Black Schole Option Formulas"
+#define VENDOR_NAME "Lucabol"
+#define PLUGIN_VERSION 00001
 
 ////////////////////////////////////////
 // Data section
