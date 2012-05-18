@@ -1,0 +1,21 @@
+// Graph an option's Theoretical Value.
+// Arguments are:
+// 1.  The SHARE's price array (NOT this option's price!)
+// 2.  The X axis dates ("DateNum()")
+// 3.  The option's strike price
+// 4.  The option's expiry date in AB format (YYYMMDD)
+// 5.  0 for PUT, non-zero for CALL
+// 6.  The share's volatility until expiry [0, 1.0]
+// 7.  The risk free annual rate of return [0, 1.0]
+// === the rest are optional ===
+// 8.  The date of the first dividend in AB format   (zero if none [the default])
+// 9.  The amount of the first dividend              (zero if none [the default])
+// 10. The date of the second dividend in AB format (zero if none [the default])
+// 11. The amount of the second dividen             (zero if none [the default])
+// 12. 1 for early expiry [the default], 0 for European style
+// 13. The minimum number of periods to use for each day -
+//     the default is the number of days to expiry.
+
+Graph0 = mdaTVV(Foreign("CBA", "Close"), DateNum(), 30, 1021024, 0, .3, .045);
+//Graph1 = Foreign("CBA", "close");
+//Graph1Style = styleCandle;

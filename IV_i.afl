@@ -1,0 +1,20 @@
+// Graph an option's Implied Volatility.
+// Arguments are:
+// 1.  The OPTION's price array
+// 2.  The SHARE's price array
+// 3.  The X axis date array ("DateNum()")
+// 4.  The option's strike price
+// 5.  The option's expiry date in AB format (YYYMMDD)
+// 6.  0 for PUT, non-zero for CALL
+// 7.  The share's volatility until expiry [0, 1.0]
+// 8.  The risk free annual rate of return [0, 1.0]
+// === the rest are optional ===
+// 9.  The date of the first dividend in AB format  (zero if none [the default])
+// 10. The amount of the first dividend             (zero if none [the default])
+// 11. The date of the second dividend in AB format (zero if none [the default])
+// 12. The amount of the second dividen             (zero if none [the default])
+// 13. 1 for early expiry [the default], 0 for European style
+// 14. The minimum number of periods to use for each day -
+//     the default is the number of days to expiry.
+
+Graph1 = mdaIVV(Close, Foreign("CBA", "close"), DateNum(), 30, 1021024, 0, .3, .045);
