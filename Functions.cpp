@@ -142,7 +142,15 @@ AmiVar TVV(int NumArgs, AmiVar* ArgsTable)
     return R;
 }
 
-AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<float (float, float, long, bool, float, float)> f)
+struct Greeks {
+	float delta;
+	float gamma;
+	float vega;
+	float theta;
+	float rho;	
+};
+
+AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<float (float, float, long, bool, float, float, Greeks&)> f)
 {
 	AmiVar				R;				// return value
 	float*				Rv;				// Result vector
@@ -154,47 +162,72 @@ AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<float (float, f
 	float				v;				// annualised Volatility
 	float				r;				// Risk free return rate
 
-	R = gSite.AllocArrayResult();
+	AmiVar				delta;			// greeks arrays
+	AmiVar				gamma;			
+	AmiVar				vega;			
+	AmiVar				theta;
+	AmiVar				rho;
 
-	Rv = R.array;
-	Sv = ArgsTable[0].array;					// array 1
-	Tv = ArgsTable[1].array;					// array 2
-	K  = ArgsTable[2].val;						// float 1
-	E  = abDateToJDN((long) ArgsTable[3].val);	// float 2
-	CorP = (ArgsTable[4].val != 0);				// float 3
-	v = ArgsTable[5].val;						// float 4
-	r = ArgsTable[6].val;						// float 5
+	delta	= gSite.AllocArrayResult();
+	gamma	= gSite.AllocArrayResult();
+	vega	= gSite.AllocArrayResult();
+	theta	= gSite.AllocArrayResult();
+	rho		= gSite.AllocArrayResult();
 
-	int					n = gSite.GetArraySize();
-	int					i;
-	int					j;
+	R		= gSite.AllocArrayResult();
+
+	Rv		= R.array;
+	Sv		= ArgsTable[0].array;					// array 1
+	Tv		= ArgsTable[1].array;					// array 2
+	K		= ArgsTable[2].val;						// float 1
+	E		= abDateToJDN((long) ArgsTable[3].val);	// float 2
+	CorP	= (ArgsTable[4].val != 0);				// float 3
+	v		= ArgsTable[5].val;						// float 4
+	r		= ArgsTable[6].val;						// float 5
+
+	int n	= gSite.GetArraySize();
+	int	i;
+	int	j;
 
 	j = SkipEmptyValues(n, Sv, Rv);
 
 
     for (i = j; i < n; ++i)
     {
-		auto currentPrice = Sv[i];
-		auto currentDate = abDateToJDN( (long) Tv[i]);
-		auto daysToExpiration = E - currentDate;
-		Rv[i] = f (currentPrice, K, daysToExpiration, CorP, v, r);
+		auto currentPrice		= Sv[i];
+		auto currentDate		= abDateToJDN( (long) Tv[i]);
+		auto daysToExpiration	= E - currentDate;
+		Greeks greeks;
+		Rv[i]					= f (currentPrice, K, daysToExpiration, CorP, v, r, greeks);
+
+		delta.array[i]	= greeks.delta;
+		gamma.array[i]	= greeks.gamma;
+		vega.array[i]	= greeks.vega;
+		theta.array[i]	= greeks.theta;
+		rho.array[i]	= greeks.rho;
 	}
+
+	gSite.SetVariable("bsDelta",	delta);
+	gSite.SetVariable("bsGamma",	gamma);
+	gSite.SetVariable("bsVega",		vega);
+	gSite.SetVariable("bsTheta",	theta);
+	gSite.SetVariable("bsRho",		rho);
 
     return R;
 }
 
-float a1 = 0.31938153f;
-float a2 = -0.356563782f;
-float a3 = 1.781477937f;
-float a4 = -1.821255978f;
-float a5 = 1.330274429f;
-float b = 0.2316419f;
-float c = 1.0f / (float)std::sqrt(2.0f * M_PI);
-
 inline float w(float l) {
-    float k = 1.0f / (1.0f + b * 1.0f);
-    float k2 = k * k;
-    float k4 = k2 * k2;
+	static const float a1 = 0.31938153f;
+	static const float a2 = -0.356563782f;
+	static const float a3 = 1.781477937f;
+	static const float a4 = -1.821255978f;
+	static const float a5 = 1.330274429f;
+	static const float b = 0.2316419f;
+	static const float c = 1.0f / (float)std::sqrt(2.0f * M_PI);
+
+    static const float k = 1.0f / (1.0f + b * 1.0f);
+    static const float k2 = k * k;
+    static const float k4 = k2 * k2;
     return c * std::exp(-0.5f * l * l) * (a1 * k + a2 * k2 + a3 * k * k2 + (a4 * k4 + a5 * k * k4));
 }
 
@@ -207,27 +240,38 @@ inline float cnd(float x) {
 
 inline float snd(float x) { return float (std::exp(- (std::pow(x,2.0f)) / 2.0f) / std::sqrt(2.0f * M_PI));}
 
+auto blackScholesEuro(float price, float strike, long days, bool CorP, float v, float r, Greeks& greeks) -> float {
+      float s			= price, x = strike; long t = days;
+      float sqrtt		= (float) std::sqrt((float)t);
+      float d1			= (std::log(s / x) + (r + v * v / 2.0f) * t) / (v * sqrtt);
+      float d2			= d1 - v * sqrtt;
+      x					= x * std::exp(-r * t);
+      float ert			= std::exp(- r * t);
+      float snd1		= snd(d1);
+
+      greeks.gamma		= snd1 / (s * v * sqrtt);
+      greeks.vega		= s * snd1 * sqrtt;
+      
+	  float cnd1		= cnd (d1);
+      float cnd2		= cnd (d2);
+      
+	  if(CorP) {
+		greeks.delta = cnd1;
+		greeks.theta	= - (s * snd1 * v) / (2.0f * sqrtt) - r * x * ert * cnd2;
+		greeks.rho		= x * t * ert * cnd2;
+        return			s * cnd1 - x * cnd2;
+      } else {
+        float cndm2		= cnd (-d2);
+		greeks.delta	= cnd1 - 1.0f;
+		greeks.theta	= - (s * snd1 * v) / (2.0f * sqrtt) + r * x * ert * cndm2;
+		greeks.rho		= -x * t * ert * cndm2;
+        return			x * cndm2 - s * cnd (-d1);
+      };
+}
+
 AmiVar bsValueEuropean(int NumArgs, AmiVar* ArgsTable)
 {
-	return execFormula(NumArgs, ArgsTable, [](float price, float strike, long days, bool CorP, float v, float r) -> float {
-      float s = price, x = strike; long t = days;
-      float sqrtt = (float) std::sqrt((float)t);
-      float d1 = (std::log(s / x) + (r + v * v / 2.0f) * t) / (v * sqrtt);
-      float d2 = d1 - v * sqrtt;
-      x = x * std::exp(-r * t);
-      float ert = std::exp(- r * t);
-      float snd1 = snd(d1);
-      float gamma = snd1 / (s * v * sqrtt);
-      float vega = s * snd1 * sqrtt;
-      float cnd1 = cnd (d1);
-      float cnd2 = cnd (d2);
-      if(CorP) {
-        return s * cnd1 - x * cnd2;//, cnd1, gamma, vega, - (s * snd1 * v) / (2. * sqrtt) - r * x * ert * cnd2, x * t * ert * cnd2
-      } else {
-        float cndm2 = cnd (-d2);
-        return x * cndm2 - s * cnd (-d1); //, cnd1 - 1., gamma, vega, - (s * snd1 * v) / (2. * sqrtt) + r * x * ert * cndm2, -x * t * ert * cndm2};
-      };
-	});
+	return execFormula(NumArgs, ArgsTable, blackScholesEuro);
 }
 
 
