@@ -17,6 +17,7 @@
 ////////////////////////////////////////////////////
 
 #define _SCL_SECURE_NO_WARNINGS 1
+#define _USE_MATH_DEFINES
 
 #include <math.h>
 #include <functional>
@@ -170,24 +171,62 @@ AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<float (float, f
 
 	j = SkipEmptyValues(n, Sv, Rv);
 
-	auto expiryDate = abDateToJDN(E);
 
     for (i = j; i < n; ++i)
     {
 		auto currentPrice = Sv[i];
 		auto currentDate = abDateToJDN( (long) Tv[i]);
-		auto daysToExpiration = expiryDate - currentDate;
+		auto daysToExpiration = E - currentDate;
 		Rv[i] = f (currentPrice, K, daysToExpiration, CorP, v, r);
 	}
 
     return R;
 }
 
+float a1 = 0.31938153f;
+float a2 = -0.356563782f;
+float a3 = 1.781477937f;
+float a4 = -1.821255978f;
+float a5 = 1.330274429f;
+float b = 0.2316419f;
+float c = 1.0f / (float)std::sqrt(2.0f * M_PI);
+
+inline float w(float l) {
+    float k = 1.0f / (1.0f + b * 1.0f);
+    float k2 = k * k;
+    float k4 = k2 * k2;
+    return c * std::exp(-0.5f * l * l) * (a1 * k + a2 * k2 + a3 * k * k2 + (a4 * k4 + a5 * k * k4));
+}
+
+inline float cnd(float x) {
+    if(x < 0.0f)
+        return w (-x);
+    else
+        return 1.0f - w (x); 
+}
+
+inline float snd(float x) { return float (std::exp(- (std::pow(x,2.0f)) / 2.0f) / std::sqrt(2.0f * M_PI));}
 
 AmiVar bsValueEuropean(int NumArgs, AmiVar* ArgsTable)
 {
-	return execFormula(NumArgs, ArgsTable, [](float price, float strike, long days, bool CorP, float v, float r) {
-		return 3.0f; 
+	return execFormula(NumArgs, ArgsTable, [](float price, float strike, long days, bool CorP, float v, float r) -> float {
+      float s = price, x = strike; long t = days;
+      float sqrtt = (float) std::sqrt((float)t);
+      float d1 = (std::log(s / x) + (r + v * v / 2.0f) * t) / (v * sqrtt);
+      float d2 = d1 - v * sqrtt;
+      x = x * std::exp(-r * t);
+      float ert = std::exp(- r * t);
+      float snd1 = snd(d1);
+      float gamma = snd1 / (s * v * sqrtt);
+      float vega = s * snd1 * sqrtt;
+      float cnd1 = cnd (d1);
+      float cnd2 = cnd (d2);
+      if(CorP) {
+        return s * cnd1 - x * cnd2;//, cnd1, gamma, vega, - (s * snd1 * v) / (2. * sqrtt) - r * x * ert * cnd2, x * t * ert * cnd2
+      } else {
+        float cndm2 = cnd (-d2);
+        return x * cndm2 - s * cnd (-d1); //, cnd1 - 1., gamma, vega, - (s * snd1 * v) / (2. * sqrtt) + r * x * ert * cndm2, -x * t * ert * cndm2};
+      };
 	});
 }
 
@@ -316,8 +355,8 @@ AmiVar IVV(int NumArgs, AmiVar *ArgsTable)
 
 FunctionTag gFunctionTable[] =
 {
-	"mdaTVV",	{ TVV, 2, 0, 5, 6, ZeroValues },
-	"mdaIVV",	{ IVV, 3, 0, 5, 6, ZeroValues },
+	//"mdaTVV",	{ TVV, 2, 0, 5, 6, ZeroValues },
+	//"mdaIVV",	{ IVV, 3, 0, 5, 6, ZeroValues },
 	"bsVEuro",	{ bsValueEuropean, 2, 0, 5, 0, NULL },
 	"bsHistVol",{ bsHistVol, 1, 0, 0, 1, DefaultValuesVol }
 };
