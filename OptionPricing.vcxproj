@@ -40,11 +40,15 @@
     <OutDir>.\Release\</OutDir>
     <IntDir>.\Release\</IntDir>
     <LinkIncremental>false</LinkIncremental>
+    <IncludePath>C:\Projects\OvenToBoost;C:\Projects\boost_1_49_0;C:\Projects\stlsoft-1.9.111\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Projects\boost_1_49_0\stage\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <OutDir>.\Debug\</OutDir>
     <IntDir>.\Debug\</IntDir>
     <LinkIncremental>true</LinkIncremental>
+    <IncludePath>C:\Projects\OvenToBoost;C:\Projects\boost_1_49_0;C:\Projects\stlsoft-1.9.111\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Projects\boost_1_49_0\stage\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>

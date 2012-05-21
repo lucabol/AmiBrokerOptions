@@ -23,6 +23,8 @@
 #include <functional>
 #include <numeric>
 
+#include "boost/date_time/gregorian/gregorian.hpp"
+
 #include "StdAfx.h"
 #include "Plugin.h"
 #include "OptionPricing.h"
@@ -63,6 +65,25 @@ static int SkipEmptyValues(int nSize, float *Src, float *Dst)
 	}
 
 	return i;
+}
+
+// Convert abDate to boost date
+inline boost::gregorian::date abDateToDate(long abDate)
+{
+    int					dd;
+    int					mm;
+    int					yy;
+
+	// Extract the day, month, and year from the given date
+    dd = (abDate % 100);
+    mm = (abDate / 100) % 100;
+    yy = (abDate / 10000) + 1900;
+	return boost::gregorian::date(yy, mm, dd);
+}
+
+// Convert from boost date to abDate
+inline long dateToAbDate(boost::gregorian::date d) {
+	return 10000 * (d.year() - 1900) + 100 * d.month() + d.day();
 }
 
 ///////////////////////////////////////////
@@ -314,6 +335,47 @@ AmiVar bsHistVol(int NumArgs, AmiVar* ArgsTable)
     return R;
 }
 
+// Returns the expiry date some months out. 0 = this month, 1 = next month, 2 = two months out, etc...
+boost::gregorian::date calcExpiry(boost::gregorian::date d, int expiries) {
+	using namespace boost::gregorian;
+
+	typedef nth_day_of_the_week_in_month nth_dow;
+
+	months single(expiries);
+	date dTarget = d + single;
+	nth_dow ndm(nth_dow::third, Friday, dTarget.month());
+	return  ndm.get_date(dTarget.year());
+}
+
+inline long round(float number) {     return number < 0.0f ? (long) ceil(number - 0.5f) : (long) floor(number + 0.5f); }
+
+AmiVar bsExpiry(int NumArgs, AmiVar* ArgsTable)
+{
+	AmiVar				R;				// return value
+	float*				Rv;				// Result vector
+	float*				Tv;				// on This date vector
+	float				expiries;		// 1 = firstExpirty, 2 = secondExpiry, ...
+
+	R				= gSite.AllocArrayResult();
+	Rv				= R.array;
+	Tv				= gSite.CallFunction("DateNum", 0, NULL).array;
+	
+	int	n			= gSite.GetArraySize();
+	expiries		= ArgsTable[0].val;
+	int	i;
+	int j;
+
+	j				= SkipEmptyValues(n, Tv, Rv);
+
+    for (i = j; i < n; ++i)
+    {
+		auto currentDate	= abDateToDate(round(Tv[i]));
+		auto d				= calcExpiry(currentDate, round(expiries));
+		Rv[i]				= (float) dateToAbDate(d);
+	}
+	return R;
+}
+
 AmiVar IVV(int NumArgs, AmiVar *ArgsTable)
 {
 	AmiVar				R;				// return value
@@ -402,7 +464,8 @@ FunctionTag gFunctionTable[] =
 	//"mdaTVV",	{ TVV, 2, 0, 5, 6, ZeroValues },
 	//"mdaIVV",	{ IVV, 3, 0, 5, 6, ZeroValues },
 	"bsVEuro",	{ bsValueEuropean, 2, 0, 5, 0, NULL },
-	"bsHistVol",{ bsHistVol, 1, 0, 0, 1, DefaultValuesVol }
+	"bsHistVol",{ bsHistVol, 1, 0, 0, 1, DefaultValuesVol },
+	"bsExpiry",	{ bsExpiry, 0, 0, 1, 0, NULL }
 };
 
 int gFunctionTableSize = sizeof(gFunctionTable)/sizeof(FunctionTag);
