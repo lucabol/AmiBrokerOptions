@@ -163,15 +163,7 @@ AmiVar TVV(int NumArgs, AmiVar* ArgsTable)
     return R;
 }
 
-struct Greeks {
-	float delta;
-	float gamma;
-	float vega;
-	float theta;
-	float rho;	
-};
-
-AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<float (float, float, long, bool, float, float, Greeks&)> f)
+AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<double (double, double, double, bool, double, double, Greeks&)> f)
 {
 	AmiVar				R;				// return value
 	float*				Rv;				// Result vector
@@ -217,15 +209,15 @@ AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<float (float, f
     {
 		auto currentPrice		= Sv[i];
 		auto currentDate		= abDateToJDN( (long) Tv[i]);
-		auto daysToExpiration	= E - currentDate;
+		auto daysToExpiration	= (E - currentDate);
 		Greeks greeks;
-		Rv[i]					= f (currentPrice, K, daysToExpiration, CorP, v, r, greeks);
+		Rv[i]					= (float) f (currentPrice, K, daysToExpiration, CorP, v, r, greeks);
 
-		delta.array[i]	= greeks.delta;
-		gamma.array[i]	= greeks.gamma;
-		vega.array[i]	= greeks.vega;
-		theta.array[i]	= greeks.theta;
-		rho.array[i]	= greeks.rho;
+		delta.array[i]	= (float)greeks.delta;
+		gamma.array[i]	= (float)greeks.gamma;
+		vega.array[i]	= (float)greeks.vega;
+		theta.array[i]	= (float)greeks.theta;
+		rho.array[i]	= (float)greeks.rho;
 	}
 
 	gSite.SetVariable("bsDelta",	delta);
@@ -237,55 +229,64 @@ AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<float (float, f
     return R;
 }
 
-inline float w(float l) {
-	static const float a1 = 0.31938153f;
-	static const float a2 = -0.356563782f;
-	static const float a3 = 1.781477937f;
-	static const float a4 = -1.821255978f;
-	static const float a5 = 1.330274429f;
-	static const float b = 0.2316419f;
-	static const float c = 1.0f / (float)std::sqrt(2.0f * M_PI);
+inline double w(double l) {
+	static const auto a1    = 0.31938153;
+	static const auto a2    = -0.356563782;
+	static const auto a3    = 1.781477937;
+	static const auto a4    = -1.821255978;
+	static const auto a5    = 1.330274429;
+	static const auto b     = 0.2316419;
+	static const auto c     = 1.0 / std::sqrt(2.0 * M_PI);
 
-    static const float k = 1.0f / (1.0f + b * 1.0f);
-    static const float k2 = k * k;
-    static const float k4 = k2 * k2;
-    return c * std::exp(-0.5f * l * l) * (a1 * k + a2 * k2 + a3 * k * k2 + (a4 * k4 + a5 * k * k4));
+    auto k                  = 1.0 / (1.0 + b * l);
+    auto k2                 = k * k;
+    auto k4                 = k2 * k2;
+    auto value              = c * std::exp(-0.5 * l * l) * (a1 * k + a2 * k2 + a3 * k * k2 + (a4 * k4 + a5 * k * k4));
+    return value;
 }
 
-inline float cnd(float x) {
-    if(x < 0.0f)
+inline double cnd(double x) {
+    if(x < 0.0)
         return w (-x);
     else
-        return 1.0f - w (x); 
+        return 1.0 - w (x); 
 }
 
-inline float snd(float x) { return float (std::exp(- (std::pow(x,2.0f)) / 2.0f) / std::sqrt(2.0f * M_PI));}
+inline double snd(double x) { return std::exp(- (std::pow(x,2.0)) / 2.0) / std::sqrt(2.0 * M_PI);}
 
-auto blackScholesEuro(float price, float strike, long days, bool CorP, float v, float r, Greeks& greeks) -> float {
-      float s			= price, x = strike; long t = days;
-      float sqrtt		= (float) std::sqrt((float)t);
-      float d1			= (std::log(s / x) + (r + v * v / 2.0f) * t) / (v * sqrtt);
-      float d2			= d1 - v * sqrtt;
+extern "C"
+auto blackScholesEuro(double price, double strike, double days, bool CorP, double v, double r, Greeks& greeks) -> double {
+      auto s			= price, x = strike; auto t = days / 365.0;
+      auto sqrtt		= std::sqrt(t);
+      auto d1			= (std::log(s / x) + (r + v * v / 2.0) * t) / (v * sqrtt);
+      auto d2			= d1 - v * sqrtt;
       x					= x * std::exp(-r * t);
-      float ert			= std::exp(- r * t);
-      float snd1		= snd(d1);
+      auto ert			= std::exp(- r * t);
+      auto snd1		    = snd(d1);
 
       greeks.gamma		= snd1 / (s * v * sqrtt);
       greeks.vega		= s * snd1 * sqrtt;
+      greeks.vega       = greeks.vega / 100.0;
       
-	  float cnd1		= cnd (d1);
-      float cnd2		= cnd (d2);
+	  auto cnd1		    = cnd (d1);
+      auto cnd2		    = cnd (d2);
       
 	  if(CorP) {
 		greeks.delta = cnd1;
-		greeks.theta	= - (s * snd1 * v) / (2.0f * sqrtt) - r * x * ert * cnd2;
+		greeks.theta	= - (s * snd1 * v) / (2.0 * sqrtt) - r * x * ert * cnd2;
+		//greeks.theta	= (s * snd1 * v) / (2.0 * sqrtt) + r * x * ert * cnd2;
+		greeks.theta	= greeks.theta / 365.0;
 		greeks.rho		= x * t * ert * cnd2;
-        return			s * cnd1 - x * cnd2;
+		greeks.rho		= greeks.rho / 100.0;
+        auto value      = s * cnd1 - x * cnd2;
+        return value;		
       } else {
-        float cndm2		= cnd (-d2);
-		greeks.delta	= cnd1 - 1.0f;
-		greeks.theta	= - (s * snd1 * v) / (2.0f * sqrtt) + r * x * ert * cndm2;
+        auto cndm2		= cnd (-d2);
+		greeks.delta	= cnd1 - 1.0;
+		greeks.theta	= - (s * snd1 * v) / (2.0 * sqrtt) + r * x * ert * cndm2;
+		greeks.theta	= greeks.theta / 365.0;
 		greeks.rho		= -x * t * ert * cndm2;
+		greeks.rho		= greeks.rho / 100.0;
         return			x * cndm2 - s * cnd (-d1);
       };
 }

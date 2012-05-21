@@ -219,3 +219,14 @@ IV1day(float				O,			// Option Price ...
 extern AmiVar TVV(int NumArgs, AmiVar* ArgsTable);
 
 extern AmiVar IVV(int NumArgs, AmiVar *ArgsTable);
+
+struct Greeks {
+	double delta;
+	double gamma;
+	double vega;
+	double theta;
+	double rho;	
+};
+
+extern "C" PLUGINAPI double
+blackScholesEuro(double price, double strike, double days, bool CorP, double v, double r, Greeks& greeks);

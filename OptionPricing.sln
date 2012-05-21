@@ -1,7 +1,12 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "OptionPricing", "OptionPricing.vcxproj", "{75667366-24A4-A862-16DB-374D26B4BF3E}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "BSOptions", "OptionPricing.vcxproj", "{75667366-24A4-A862-16DB-374D26B4BF3E}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TestBSOptions", "TestBSOptions\TestBSOptions.vcxproj", "{E28B6DD5-A590-40B6-8283-E078F00A5C4E}"
+	ProjectSection(ProjectDependencies) = postProject
+		{75667366-24A4-A862-16DB-374D26B4BF3E} = {75667366-24A4-A862-16DB-374D26B4BF3E}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -13,6 +18,10 @@ Global
 		{75667366-24A4-A862-16DB-374D26B4BF3E}.Debug|Win32.Build.0 = Debug|Win32
 		{75667366-24A4-A862-16DB-374D26B4BF3E}.Release|Win32.ActiveCfg = Release|Win32
 		{75667366-24A4-A862-16DB-374D26B4BF3E}.Release|Win32.Build.0 = Release|Win32
+		{E28B6DD5-A590-40B6-8283-E078F00A5C4E}.Debug|Win32.ActiveCfg = Debug|Win32
+		{E28B6DD5-A590-40B6-8283-E078F00A5C4E}.Debug|Win32.Build.0 = Debug|Win32
+		{E28B6DD5-A590-40B6-8283-E078F00A5C4E}.Release|Win32.ActiveCfg = Release|Win32
+		{E28B6DD5-A590-40B6-8283-E078F00A5C4E}.Release|Win32.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
