@@ -24,14 +24,25 @@ void testG(Greeks g, double value, double v, double d, double ga, double ve, dou
     std::cout << std::endl;
 }
 
+void testD(char* a, char* b) {
+	if(strcmp(a, b) == 0) std::cout << "Ok ..." << std::endl; else std::cout << "ERROR !!!" << std::endl; 
+}
+
 int _tmain(int argc, _TCHAR* argv[])
 {
     Greeks g;
-    double v = blackScholesEuro(1314.0, 1330.0, 26, true, 0.1769, 0.0045, g);
-    testG(g, v, 17.878, 0.411, 0.006, 1.36382, 0.373649, 0.37160);
+    double v			= blackScholesEuro(1314.0, 1330.0, 26, true, 0.1769, 0.0045, g);
+    testG(g, v, 17.878, 0.411, 0.006, 1.36382, -0.47038, 0.37160);
 
-    v = blackScholesEuro(1314.0, 1330.0, 26, false, 0.1769, 0.0045, g);
+    v					= blackScholesEuro(1314.0, 1330.0, 26, false, 0.1769, 0.0045, g);
     testG(g, v, 33.452, -0.589, 0.006, 1.36382, -0.454005, -0.57548);
+
+	auto d				= testExpiry(2012, 5, 22, 0);	testD("2012-May-18", d);
+	d					= testExpiry(2012, 12, 31, 1);	testD("2013-Jan-18", d);
+	d					= testExpiry(2011, 1, 1, 8);	testD("2011-Sep-16", d);
+
+	Condor c;
+	auto found			= testCondor(2012, 05, 25, 1314.0, 0.2705, 0.0045, 25.0/1314.0, 4, 6, 40, 80, 0.10, 3.0 / 25.0, c);
 
     return 0;
 }

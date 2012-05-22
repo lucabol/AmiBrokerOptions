@@ -16,6 +16,7 @@
 //
 ////////////////////////////////////////////////////
 
+#define _CRT_SECURE_NO_WARNINGS
 #define _SCL_SECURE_NO_WARNINGS 1
 #define _USE_MATH_DEFINES
 
@@ -97,71 +98,6 @@ inline long dateToAbDate(boost::gregorian::date d) {
 //
 ///////////////////////////////////////////////
 
-
-AmiVar TVV(int NumArgs, AmiVar* ArgsTable)
-{
-	AmiVar				R;				// return value
-	float*				Rv;				// Result vector
-	float*				Sv;				// Share price vector
-	float*				Tv;				// on This date vector
-	float				K;				// striKe price
-	long				E;				// Expiry date
-	bool				CorP;			// true for Call, false for Put
-	float				v;				// annualised Volatility
-	float				r;				// Risk free return rate
-	int					nDividends = 0;	// no. elements in ...
-	DiscreteDividend	vDividends[2];	// the discrete dividends for the share
-	bool				ee;				// is Early Exercise possible?
-	int					minPeriods;		// minimum number of periods to use
-
-	R = gSite.AllocArrayResult();
-
-	Rv = R.array;
-	Sv = ArgsTable[0].array;					// array 1
-	Tv = ArgsTable[1].array;					// array 2
-	K  = ArgsTable[2].val;						// float 1
-	E  = abDateToJDN((long) ArgsTable[3].val);	// float 2
-	CorP = (ArgsTable[4].val != 0);				// float 3
-	v = ArgsTable[5].val;						// float 4
-	r = ArgsTable[6].val;						// float 5
-	if (ArgsTable[7].val != 0)					// optional floats 1 & 2
-	{
-		vDividends[nDividends].date = abDateToJDN((long) ArgsTable[7].val);
-		vDividends[nDividends].amount = ArgsTable[8].val;
-		++nDividends;
-	}
-	if (ArgsTable[9].val != 0)					// optional floats 3 & 4
-	{
-		vDividends[nDividends].date = abDateToJDN((long) ArgsTable[9].val);
-		vDividends[nDividends].amount = ArgsTable[10].val;
-		++nDividends;
-	}
-	ee = (ArgsTable[11].val != 0);				// optional float 5
-	minPeriods = (long) ArgsTable[12].val;		// optional float 6
-
-	int					n = gSite.GetArraySize();
-	int					i;
-	int					j;
-
-	j = SkipEmptyValues(n, Sv, Rv);
-
-    for (i = j; i < n; ++i)
-    {
-		Rv[i] = TV1day(Sv[i],
-					   abDateToJDN((long) Tv[i]),
-					   K,
-					   E,
-					   CorP,
-					   v,
-					   r,
-					   nDividends,
-					   vDividends,
-					   ee,
-					   minPeriods);
-	}
-
-    return R;
-}
 
 AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<double (double, double, double, bool, double, double, Greeks&)> f)
 {
@@ -254,6 +190,8 @@ inline double cnd(double x) {
 
 inline double snd(double x) { return std::exp(- (std::pow(x,2.0)) / 2.0) / std::sqrt(2.0 * M_PI);}
 
+// Black Scholes formula, to calculate volatility surface read doc below formula 12. Just use terms to 3rd power with p.34 table 4 values middle table
+// http://finance.business.queensu.ca/psfile/DaglishHullSuoRevised.pdf, F = forward value of S for a contract maturying at T -> F = S*exp(r * (T -t)) , K = strike price, S = asset price
 extern "C"
 auto blackScholesEuro(double price, double strike, double days, bool CorP, double v, double r, Greeks& greeks) -> double {
       auto s			= price, x = strike; auto t = days / 365.0;
@@ -297,43 +235,11 @@ AmiVar bsValueEuropean(int NumArgs, AmiVar* ArgsTable)
 }
 
 
-float calcHistVol(float* prices, int currentBar, int lookBack) {
-	auto startPrice	= currentBar - lookBack;
-	if(startPrice < 0) return EMPTY_VAL;
 
-	auto sum	= std::accumulate(&prices[startPrice], &prices[currentBar], 0.0f);
-	auto mean	= sum / lookBack;
-	
-	auto sq_sum	= std::inner_product(&prices[startPrice], &prices[currentBar], &prices[startPrice], 0.0f);
-	auto stdev	= std::sqrt(sq_sum / lookBack - mean * mean);
-	return stdev;
-}
-
-AmiVar bsHistVol(int NumArgs, AmiVar* ArgsTable)
-{
-	AmiVar				R;				// return value
-	float*				Rv;				// Result vector
-	float*				Sv;				// Share price vector
-	float				lookBack;		// Lookback period in days
-
-	R = gSite.AllocArrayResult();
-
-	Rv = R.array;
-	Sv = ArgsTable[0].array;					// array 1
-	lookBack = ArgsTable[1].val;				// float 1
-
-	int					n = gSite.GetArraySize();
-	int					i;
-	int					j;
-
-	j = SkipEmptyValues(n, Sv, Rv);
-
-    for (i = j; i < n; ++i)
-    {
-		Rv[i] = calcHistVol(Sv, i, (int) lookBack);
-	}
-
-    return R;
+void print(boost::gregorian::date d) {
+	std::stringstream ss;
+	ss << d;
+	std::cout << ss.str().c_str() << std::endl;
 }
 
 // Returns the expiry date some months out. 0 = this month, 1 = next month, 2 = two months out, etc...
@@ -341,21 +247,34 @@ boost::gregorian::date calcExpiry(boost::gregorian::date d, int expiries) {
 	using namespace boost::gregorian;
 
 	typedef nth_day_of_the_week_in_month nth_dow;
-
 	months single(expiries);
 	date dTarget = d + single;
 	nth_dow ndm(nth_dow::third, Friday, dTarget.month());
-	return  ndm.get_date(dTarget.year());
+	auto value = ndm.get_date(dTarget.year());
+	print(value);
+	return  value;
 }
 
-inline long round(float number) {     return number < 0.0f ? (long) ceil(number - 0.5f) : (long) floor(number + 0.5f); }
+extern "C"
+char* testExpiry(int year, int month, int day, int expiries) {
+	auto d		= boost::gregorian::date(year, month, day);
+	auto r		= calcExpiry(d, expiries);
+
+	std::stringstream ss;
+	ss << r;
+	static char tmp[10];
+	strcpy(tmp, ss.str().c_str());
+	return tmp;
+}
+
+inline long round(double number) {     return number < 0.0 ? (long) ceil(number - 0.5) : (long) floor(number + 0.5); }
 
 AmiVar bsExpiry(int NumArgs, AmiVar* ArgsTable)
 {
-	AmiVar				R;				// return value
-	float*				Rv;				// Result vector
-	float*				Tv;				// on This date vector
-	float				expiries;		// 1 = firstExpirty, 2 = secondExpiry, ...
+	AmiVar			R;				// return value
+	float*			Rv;				// Result vector
+	float*			Tv;				// on This date vector
+	float			expiries;		// 1 = firstExpirty, 2 = secondExpiry, ...
 
 	R				= gSite.AllocArrayResult();
 	Rv				= R.array;
@@ -377,74 +296,108 @@ AmiVar bsExpiry(int NumArgs, AmiVar* ArgsTable)
 	return R;
 }
 
-AmiVar IVV(int NumArgs, AmiVar *ArgsTable)
+bool condor(
+			boost::gregorian::date now,	// date to evaluate 
+			double spot,				// spot price underlying
+			double v,					// ATM volatility
+			double r,					// risk free rate
+			double step,				// % of spot price to keep as distance between wings, also distance between high open interest strikes
+			int minCallShortDist,		// min distance from the short call strike in steps
+			int minPutShortDist,		// min distance from the short put strike in steps
+			int minDays,				// min number of days to expiry
+			int maxDays,				// max number of days to expiry
+			double maxDelta,			// max acceptable delta value for shorts in steps
+			double minPremium,			// min accepted premium as % of step
+			Condor& ret					// return value
+			)
 {
-	AmiVar				R;				// return value
-	float*				Rv;				// Result vector
-	float*				Ov;				// Option price vector
-	float*				Sv;				// Share price vector
-	float*				Tv;				// on This date vector
-	float				K;				// striKe price
-	long				E;				// Expiry date
-	bool				CorP;			// true for Call, false for Put
-	float				v;				// annualised Volatility
-	float				r;				// Risk free return rate
-	int					nDividends = 0;	// no. elements in ...
-	DiscreteDividend	vDividends[2];	// the discrete dividends for the share
-	bool				ee;				// is Early Exercise possible?
-	int					minPeriods;		// minimum number of periods to use
+	// convert params to dollar signs
+	auto stepPr			= round(step * spot);
+	auto toUSD			= [stepPr] (double x) { return round(stepPr * x);};
+	auto minCpr			= toUSD( minCallShortDist );
+	auto minPpr			= toUSD( minPutShortDist );
+	auto premiumPr		= toUSD( minPremium );
 
-	R = gSite.AllocArrayResult();
+	// calc strike values for short legs
+	auto atm			= round(spot / stepPr) * (long) stepPr;
+	auto callShort		= atm + minCpr;
+	auto putShort		= atm - minPpr;
+	
+	auto addDays		= [](boost::gregorian::date d, int dys) -> boost::gregorian::date {
+		using namespace boost::gregorian;
 
-	Rv = R.array;
-	Ov = ArgsTable[0].array;					// array 1
-	Sv = ArgsTable[1].array;					// array 2
-	Tv = ArgsTable[2].array;					// array 3
-	K  = ArgsTable[3].val;						// float 1
-	E  = abDateToJDN((long) ArgsTable[4].val);	// float 2
-	CorP = (ArgsTable[5].val != 0);				// float 3
-	v = ArgsTable[6].val;						// float 4
-	r = ArgsTable[7].val;						// float 5
-	if (ArgsTable[8].val != 0)					// optional floats 1 & 2
-	{
-		vDividends[nDividends].date = abDateToJDN((long) ArgsTable[8].val);
-		vDividends[nDividends].amount = ArgsTable[9].val;
-		++nDividends;
+		auto toAdd		= days(dys);
+		auto dTarget	= d + toAdd;
+		print(dTarget);
+		return  dTarget;
+	};
+
+	// calc min & max allowed expiry dates
+	auto minDate		= addDays(now, minDays);
+	auto maxDate		= addDays(now, maxDays);
+	auto expiry			= calcExpiry(now, 0);
+
+	// find first good expiry
+	while(expiry < minDate)
+		expiry			= calcExpiry(expiry, +1);
+
+	Greeks g;
+	auto scholes		= [spot, v, r, &g] (double strike, int days, bool CorP) {
+		return blackScholesEuro(spot, strike, days, CorP, v, r, g);
+	};
+
+	// find a condor that works at this expiry
+	auto findCondor		= [callShort, putShort, spot, stepPr, v, r, minCpr, minPpr, scholes, maxDelta, premiumPr, &g, &ret] (int days) -> bool {
+		auto cStrike	= callShort;
+		auto pStrike	= putShort;
+
+		while(true) {
+			// it would be faster to 'continue' after each one of these conditions is not meet, but less clear
+			auto shCall			= scholes(cStrike, days, true);
+			auto cDelta			= g.delta;
+			auto shPut			= scholes(pStrike, days, false);
+			auto pDelta			= g.delta;
+			auto lgCall			= scholes(cStrike + stepPr, days, true);
+			auto lgPut			= scholes(pStrike - stepPr, days, false);
+			auto net			= shCall + shPut - lgCall - lgPut;
+
+			if(cDelta <= maxDelta && (-pDelta) <= maxDelta && net >= premiumPr) {
+				// it's a good condor
+				ret.longCallStrike		= lgCall;
+				ret.shortCallStrike		= shCall;
+				ret.shortPutStrike		= shPut;
+				ret.longPutStrike		= lgPut;
+				ret.netPremium			= net;
+				return true;
+			} else {
+				// it has too big deltas, but the premium is good enough to continue the search at this expiry
+				if(net > premiumPr) {
+					cStrike					= cStrike + stepPr;
+					pStrike					= pStrike - stepPr;
+				} else {
+					// premium less than required, no point continuing at this expiry, it just gets worse (true?)
+					return false;
+				}
+			}
+		}
+	};
+
+	// increases the expiry until it finds a condor or the expiry is too far out
+	while (expiry < maxDate) {
+		auto days		= (expiry - now).days();
+		if(findCondor(days))
+			return true;
+		expiry			= calcExpiry(expiry, +1);
 	}
-	if (ArgsTable[10].val != 0)					// optional floats 3 & 4
-	{
-		vDividends[nDividends].date = abDateToJDN((long) ArgsTable[10].val);
-		vDividends[nDividends].amount = ArgsTable[11].val;
-		++nDividends;
-	}
-	ee = (ArgsTable[12].val != 0);				// optional float 5
-	minPeriods = (long) ArgsTable[13].val;		// optional float 6
 
-	int					n = gSite.GetArraySize();
-	int					i;
-	int					j;
-
-	j = SkipEmptyValues(n, Sv, Rv);
-
-    for (i = j; i < n; ++i)
-    {
-		Rv[i] = IV1day(Ov[i],
-					   Sv[i],
-					   abDateToJDN((long) Tv[i]),
-					   K,
-					   E,
-					   CorP,
-					   v,
-					   r,
-					   nDividends,
-					   vDividends,
-					   ee,
-					   minPeriods);
-	}
-
-    return R;
+	return false;
 }
 
+extern "C"
+bool testCondor(int year, int month, int day,double spot,double v,double r,double step,int minCallShortDist,int minPutShortDist,
+				int minDays,int maxDays,double maxDelta,double minPremium,Condor& ret) {
+	return condor(boost::gregorian::date(year, month, day), spot, v, r, step, minCallShortDist, minPutShortDist, minDays, maxDays, maxDelta, minPremium, ret);
+}
 
 /////////////////////////////////////////////
 // Function table now follows
@@ -462,10 +415,7 @@ AmiVar IVV(int NumArgs, AmiVar *ArgsTable)
 
 FunctionTag gFunctionTable[] =
 {
-	//"mdaTVV",	{ TVV, 2, 0, 5, 6, ZeroValues },
-	//"mdaIVV",	{ IVV, 3, 0, 5, 6, ZeroValues },
 	"bsVEuro",	{ bsValueEuropean, 2, 0, 5, 0, NULL },
-	"bsHistVol",{ bsHistVol, 1, 0, 0, 1, DefaultValuesVol },
 	"bsExpiry",	{ bsExpiry, 0, 0, 1, 0, NULL }
 };
 
