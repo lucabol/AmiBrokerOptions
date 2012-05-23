@@ -190,11 +190,48 @@ inline double cnd(double x) {
 
 inline double snd(double x) { return std::exp(- (std::pow(x,2.0)) / 2.0) / std::sqrt(2.0 * M_PI);}
 
+// Eq 12 from paper below, gives inconsistent results
+extern "C"
+double volatilitySmile1(double spot, double strike, double time, double r) {
+	static const auto	c1	= -0.2547240; 
+	static const auto	c2	=  0.1319096; 
+	static const auto	c3	=  0.5595131;
+
+	time = time * 30.;
+	auto F					= spot * std::exp(r * time);
+	auto K					= std::log(strike / F) / std::sqrt(time);
+	auto ret				= c1 * K + c2 * std::pow(K, 2) + c3 * std::pow(K, 3);
+	return ret;
+}
+
+
+// Eq 11 from paper below
+extern "C"
+double volatilitySmile(double spot, double strike, double time, double r) {
+	static const auto	b0	=  0.0058480;
+	static const auto	b1	= -0.2884075; 
+	static const auto	b2	=  0.0322727;
+	static const auto	b3	= -0.0075740;
+	static const auto	b4	=  0.0015705;
+	static const auto	b5	=  0.0414902;
+
+	//time = time * 30.;
+	auto F					= spot * std::exp(r * time);
+	auto K					= std::log(strike / F);
+	auto ret				= b0 + b1 * K + b2 * std::pow(K, 2) + b3 * time + b4 * std::pow(time, 2) + b5 * K * time;
+	return ret;
+}
+
 // Black Scholes formula, to calculate volatility surface read doc below formula 12. Just use terms to 3rd power with p.34 table 4 values middle table
 // http://finance.business.queensu.ca/psfile/DaglishHullSuoRevised.pdf, F = forward value of S for a contract maturying at T -> F = S*exp(r * (T -t)) , K = strike price, S = asset price
 extern "C"
 auto blackScholesEuro(double price, double strike, double days, bool CorP, double v, double r, Greeks& greeks) -> double {
-      auto s			= price, x = strike; auto t = days / 365.0;
+
+      auto s			= price;
+	  auto x			= strike;
+	  auto t			= days / 365.0;
+	  //auto smile		= volatilitySmile(s, x, t, r);
+
       auto sqrtt		= std::sqrt(t);
       auto d1			= (std::log(s / x) + (r + v * v / 2.0) * t) / (v * sqrtt);
       auto d2			= d1 - v * sqrtt;
@@ -348,45 +385,48 @@ bool condor(
 
 	// find a condor that works at this expiry
 	auto findCondor		= [callShort, putShort, spot, stepPr, v, r, minCpr, minPpr, scholes, maxDelta, premiumPr, &g, &ret] (int days) -> bool {
-		auto cStrike	= callShort;
-		auto pStrike	= putShort;
+		ret.shortCallStrike				= callShort;
+		ret.shortPutStrike				= putShort;
+		auto shCallPremium				= 0.0;
+		auto shPutPremium				= 0.0;
 
+		// find short call strike price < maxDelta
 		while(true) {
-			// it would be faster to 'continue' after each one of these conditions is not meet, but less clear
-			auto shCall			= scholes(cStrike, days, true);
-			auto cDelta			= g.delta;
-			auto shPut			= scholes(pStrike, days, false);
-			auto pDelta			= g.delta;
-			auto lgCall			= scholes(cStrike + stepPr, days, true);
-			auto lgPut			= scholes(pStrike - stepPr, days, false);
-			auto net			= shCall + shPut - lgCall - lgPut;
-
-			if(cDelta <= maxDelta && (-pDelta) <= maxDelta && net >= premiumPr) {
-				// it's a good condor
-				ret.longCallStrike		= lgCall;
-				ret.shortCallStrike		= shCall;
-				ret.shortPutStrike		= shPut;
-				ret.longPutStrike		= lgPut;
-				ret.netPremium			= net;
-				return true;
-			} else {
-				// it has too big deltas, but the premium is good enough to continue the search at this expiry
-				if(net > premiumPr) {
-					cStrike					= cStrike + stepPr;
-					pStrike					= pStrike - stepPr;
-				} else {
-					// premium less than required, no point continuing at this expiry, it just gets worse (true?)
-					return false;
-				}
-			}
+			shCallPremium				= scholes(ret.shortCallStrike, days, true);
+			if(g.delta <= maxDelta)
+				break;
+			else
+				ret.shortCallStrike		+= stepPr;
 		}
+
+		// find short put strike price < maxDelta
+		while(true) {
+			shPutPremium				= scholes(ret.shortPutStrike, days, false);
+			if( (- g.delta) <= maxDelta)
+				break;
+			else
+				ret.shortPutStrike		-= stepPr;
+		}
+
+		// check premium is adeguate
+		ret.longCallStrike				= ret.shortCallStrike + stepPr;
+		ret.longPutStrike				= ret.shortPutStrike  - stepPr;
+		auto lgCall						= scholes(ret.longCallStrike, days, true);
+		auto lgPut						= scholes(ret.longPutStrike,  days, false);
+		ret.netPremium					= shCallPremium + shPutPremium - lgCall - lgPut;
+
+		return ret.netPremium > premiumPr;
 	};
 
 	// increases the expiry until it finds a condor or the expiry is too far out
 	while (expiry < maxDate) {
 		auto days		= (expiry - now).days();
-		if(findCondor(days))
+		if(findCondor(days)) {
+			ret.year	= expiry.year();
+			ret.month	= expiry.month();
+			ret.day		= expiry.day();
 			return true;
+		}
 		expiry			= calcExpiry(expiry, +1);
 	}
 

@@ -22,6 +22,8 @@ struct Condor {
 	double longPutStrike;
 
 	double netPremium;
+
+	int year, month, day;
 };
 
 extern "C" PLUGINAPI double
@@ -34,4 +36,5 @@ extern "C" PLUGINAPI bool
 testCondor(int year, int month, int day,double spot,double v,double r,double step,int minCallShortDist,int minPutShortDist,
 				int minDays,int maxDays,double maxDelta,double minPremium,Condor& ret);
 
-
+extern "C" PLUGINAPI
+double volatilitySmile(double spot, double strike, double time, double r);

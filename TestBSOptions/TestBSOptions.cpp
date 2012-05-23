@@ -41,8 +41,13 @@ int _tmain(int argc, _TCHAR* argv[])
 	d					= testExpiry(2012, 12, 31, 1);	testD("2013-Jan-18", d);
 	d					= testExpiry(2011, 1, 1, 8);	testD("2011-Sep-16", d);
 
+	auto vol = 0.2248 + volatilitySmile(1316, 825, 60.0 / 365.0, 0.0045);
+	vol = 0.2248 +  volatilitySmile(1316, 1000, 60.0 / 365.0, 0.0045);
+	vol = 0.2248 +  volatilitySmile(1316, 1400, 60.0 / 365.0, 0.0045);
+	vol = 0.2248 +  volatilitySmile(1316, 1500, 60.0 / 365.0, 0.0045);
+
 	Condor c;
-	auto found			= testCondor(2012, 05, 25, 1314.0, 0.2705, 0.0045, 25.0/1314.0, 4, 6, 40, 80, 0.10, 3.0 / 25.0, c);
+	auto found			= testCondor(2012, 05, 25, 1314.0, 0.2248, 0.0045, 25.0/1314.0, 4, 6, 40, 80, 0.10, 3.0 / 25.0, c);
 
     return 0;
 }
