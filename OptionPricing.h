@@ -1,7 +1,3 @@
-//============================================================================
-// Functions exported by this DLL plus data structures required to use them
-//
- 
 #include	"Plugin.h"
 
 extern "C"
@@ -27,7 +23,7 @@ struct Condor {
 };
 
 extern "C" PLUGINAPI double
-blackScholesEuro(double price, double strike, double days, bool CorP, double v, double r, Greeks& greeks);
+blackScholesEuro(double price, double strike, double days, bool CorP, double v, double r, Greeks& greeks, bool useSmile);
 
 extern "C" PLUGINAPI char*
 testExpiry(int year, int month, int day, int expiries);
@@ -37,4 +33,4 @@ testCondor(int year, int month, int day,double spot,double v,double r,double ste
 				int minDays,int maxDays,double maxDelta,double minPremium,Condor& ret);
 
 extern "C" PLUGINAPI
-double volatilitySmile(double spot, double strike, double time, double r);
+double volatilitySmile(double spot, double strike, double time, double r, bool CorP);

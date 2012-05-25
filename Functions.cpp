@@ -1,21 +1,3 @@
-////////////////////////////////////////////////////
-// Functions.cpp
-// Sample functions implementation file for example AmiBroker plug-in
-//
-// Copyright (C)2001 Tomasz Janeczko, amibroker.com
-// All rights reserved.
-//
-// Last modified: 2001-09-24 TJ
-// 
-// You may use this code in your own projects provided that:
-//
-// 1. You are registered user of AmiBroker
-// 2. The software you write using it is for personal, noncommercial use only
-//
-// For commercial use you have to obtain a separate license from Amibroker.com
-//
-////////////////////////////////////////////////////
-
 #define _CRT_SECURE_NO_WARNINGS
 #define _SCL_SECURE_NO_WARNINGS 1
 #define _USE_MATH_DEFINES
@@ -99,7 +81,7 @@ inline long dateToAbDate(boost::gregorian::date d) {
 ///////////////////////////////////////////////
 
 
-AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<double (double, double, double, bool, double, double, Greeks&)> f)
+AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<double (double, double, double, bool, double, double, Greeks&, bool)> f)
 {
 	AmiVar				R;				// return value
 	float*				Rv;				// Result vector
@@ -110,6 +92,7 @@ AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<double (double,
 	bool				CorP;			// true for Call, false for Put
 	float				v;				// annualised Volatility
 	float				r;				// Risk free return rate
+	bool				useSmile;		// true -> use it, false -> standard bs
 
 	AmiVar				delta;			// greeks arrays
 	AmiVar				gamma;			
@@ -133,6 +116,7 @@ AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<double (double,
 	CorP	= (ArgsTable[4].val != 0);				// float 3
 	v		= ArgsTable[5].val;						// float 4
 	r		= ArgsTable[6].val;						// float 5
+	useSmile= (ArgsTable[7].val != 0);				// bool 7
 
 	int n	= gSite.GetArraySize();
 	int	i;
@@ -147,7 +131,7 @@ AmiVar execFormula(int NumArgs, AmiVar* ArgsTable, std::function<double (double,
 		auto currentDate		= abDateToJDN( (long) Tv[i]);
 		auto daysToExpiration	= (E - currentDate);
 		Greeks greeks;
-		Rv[i]					= (float) f (currentPrice, K, daysToExpiration, CorP, v, r, greeks);
+		Rv[i]					= (float) f (currentPrice, K, daysToExpiration, CorP, v, r, greeks, useSmile);
 
 		delta.array[i]	= (float)greeks.delta;
 		gamma.array[i]	= (float)greeks.gamma;
@@ -197,17 +181,17 @@ double volatilitySmile1(double spot, double strike, double time, double r) {
 	static const auto	c2	=  0.1319096; 
 	static const auto	c3	=  0.5595131;
 
-	time = time * 30.;
 	auto F					= spot * std::exp(r * time);
 	auto K					= std::log(strike / F) / std::sqrt(time);
-	auto ret				= c1 * K + c2 * std::pow(K, 2) + c3 * std::pow(K, 3);
+	auto ret				= c1 * K + c2 * std::pow(K, 2) + c3 * std::pow(std::abs(K), 3);
+
 	return ret;
 }
 
 
 // Eq 11 from paper below
 extern "C"
-double volatilitySmile(double spot, double strike, double time, double r) {
+double volatilitySmile(double spot, double strike, double time, double r, bool CorP) {
 	static const auto	b0	=  0.0058480;
 	static const auto	b1	= -0.2884075; 
 	static const auto	b2	=  0.0322727;
@@ -215,22 +199,42 @@ double volatilitySmile(double spot, double strike, double time, double r) {
 	static const auto	b4	=  0.0015705;
 	static const auto	b5	=  0.0414902;
 
-	//time = time * 30.;
 	auto F					= spot * std::exp(r * time);
 	auto K					= std::log(strike / F);
 	auto ret				= b0 + b1 * K + b2 * std::pow(K, 2) + b3 * time + b4 * std::pow(time, 2) + b5 * K * time;
+
+	auto crazy				= CorP ? 3.5 : 2.0; // derived empirically from volatility smile one day
+	ret						= crazy * ret;
+
 	return ret;
 }
 
-// Black Scholes formula, to calculate volatility surface read doc below formula 12. Just use terms to 3rd power with p.34 table 4 values middle table
+// Eq 14 from paper below gives inconsistent results
+extern "C"
+double volatilitySmile2(double spot, double strike, double time, double r) {
+	static const auto	d0	=  0.4419942;
+	static const auto	d1	= -0.2394926; 
+	static const auto	d2	=  0.0912235;
+	static const auto	d3	=  0.2581095;
+
+	auto F					= spot * std::exp(r * time);
+	auto K					= std::log(strike / F) / std::pow(time, d0);
+	auto ret				= d1 * K + d2 * std::pow(K, 2) + d3 * std::pow(K, 3);
+	return ret;
+}
+
+// Black Scholes formula, to calculate volatility surface read doc below formula 11. 
 // http://finance.business.queensu.ca/psfile/DaglishHullSuoRevised.pdf, F = forward value of S for a contract maturying at T -> F = S*exp(r * (T -t)) , K = strike price, S = asset price
 extern "C"
-auto blackScholesEuro(double price, double strike, double days, bool CorP, double v, double r, Greeks& greeks) -> double {
+auto blackScholesEuro(double price, double strike, double days, bool CorP, double v, double r, Greeks& greeks, bool useSmile)
+					  -> double {
 
       auto s			= price;
 	  auto x			= strike;
 	  auto t			= days / 365.0;
-	  //auto smile		= volatilitySmile(s, x, t, r);
+	  if(useSmile) {
+		  v				= v + volatilitySmile(s, x, t, r, CorP);
+	  }
 
       auto sqrtt		= std::sqrt(t);
       auto d1			= (std::log(s / x) + (r + v * v / 2.0) * t) / (v * sqrtt);
@@ -272,12 +276,15 @@ AmiVar bsValueEuropean(int NumArgs, AmiVar* ArgsTable)
 }
 
 
-
+#ifdef _DEBUG
 void print(boost::gregorian::date d) {
 	std::stringstream ss;
 	ss << d;
 	std::cout << ss.str().c_str() << std::endl;
 }
+#else
+void print(boost::gregorian::date d) {}
+#endif
 
 // Returns the expiry date some months out. 0 = this month, 1 = next month, 2 = two months out, etc...
 boost::gregorian::date calcExpiry(boost::gregorian::date d, int expiries) {
@@ -288,7 +295,6 @@ boost::gregorian::date calcExpiry(boost::gregorian::date d, int expiries) {
 	date dTarget = d + single;
 	nth_dow ndm(nth_dow::third, Friday, dTarget.month());
 	auto value = ndm.get_date(dTarget.year());
-	print(value);
 	return  value;
 }
 
@@ -365,7 +371,7 @@ bool condor(
 
 		auto toAdd		= days(dys);
 		auto dTarget	= d + toAdd;
-		print(dTarget);
+
 		return  dTarget;
 	};
 
@@ -380,7 +386,7 @@ bool condor(
 
 	Greeks g;
 	auto scholes		= [spot, v, r, &g] (double strike, int days, bool CorP) {
-		return blackScholesEuro(spot, strike, days, CorP, v, r, g);
+		return blackScholesEuro(spot, strike, days, CorP, v, r, g, true);
 	};
 
 	// find a condor that works at this expiry
@@ -433,6 +439,73 @@ bool condor(
 	return false;
 }
 
+AmiVar bsCondor(int NumArgs, AmiVar* ArgsTable)
+{
+	using namespace std;
+
+	// results
+	AmiVar results						= gSite.AllocArrayResult();			
+	AmiVar longCallStrike				= gSite.AllocArrayResult();			
+	AmiVar shortCallStrike				= gSite.AllocArrayResult();				
+	AmiVar shortPutStrike				= gSite.AllocArrayResult();				
+	AmiVar longPutStrike				= gSite.AllocArrayResult();				
+	AmiVar netPremium					= gSite.AllocArrayResult();				
+	AmiVar expiries						= gSite.AllocArrayResult();
+
+	int n								= gSite.GetArraySize();
+
+	auto dates							= vector<boost::gregorian::date>(n);
+	float* nows							= ArgsTable[0].array;
+	for(int i = 0; i < n; ++i)			dates.push_back(abDateToDate((long)nows[i]));
+
+	float* spots						= ArgsTable[1].array;
+	float* vols							= ArgsTable[2].array;
+	float* rates						= ArgsTable[3].array;
+	float  steps						= ArgsTable[4].val;
+	float  minCall						= ArgsTable[5].val;
+	float  minPut						= ArgsTable[6].val;
+	float  minDays						= ArgsTable[7].val;
+	float  maxDays						= ArgsTable[8].val;
+	float  maxDelta						= ArgsTable[9].val;
+	float  minPremium					= ArgsTable[10].val;
+	
+	int	i;
+	int	j;
+
+	// add empty values at the start of results if there is no spot
+	for (j = 0; j < n && IS_EMPTY(spots[j]); j++)
+	{
+		longCallStrike.array[j]			= EMPTY_VAL;
+		shortCallStrike.array[j]		= EMPTY_VAL;
+		longPutStrike.array[j]			= EMPTY_VAL;
+		shortPutStrike.array[j]			= EMPTY_VAL;
+		netPremium.array[j]				= EMPTY_VAL;
+		expiries.array[j]				= EMPTY_VAL;
+	}
+
+	Condor c;
+    for (i = j; i < n; ++i)
+    {
+		results.array[i]				= condor(dates[i], spots[i], vols[i], rates[i], steps, round(minCall), round(minPut), round(minDays),
+										  round(maxDays), maxDelta, minPremium, c);
+		longCallStrike.array[i]			= (float) c.longCallStrike;
+		shortCallStrike.array[i]		= (float) c.shortCallStrike;
+		longPutStrike.array[i]			= (float) c.longPutStrike;
+		shortPutStrike.array[i]			= (float) c.shortPutStrike;
+		netPremium.array[i]				= (float) c.netPremium;
+		expiries.array[i]				= (float) dateToAbDate(boost::gregorian::date(c.year, c.month, c.day));
+	}
+
+	gSite.SetVariable("bsLongCallStrike",  longCallStrike);
+	gSite.SetVariable("bsShortCallStrike", shortCallStrike);
+	gSite.SetVariable("bsLongPutStrike",   longPutStrike);
+	gSite.SetVariable("bsShortPutstrike",  shortPutStrike);
+	gSite.SetVariable("bsNetPremium",	   netPremium);
+	gSite.SetVariable("bsExpiry",		   expiries);
+
+    return results;
+}
+
 extern "C"
 bool testCondor(int year, int month, int day,double spot,double v,double r,double step,int minCallShortDist,int minPutShortDist,
 				int minDays,int maxDays,double maxDelta,double minPremium,Condor& ret) {
@@ -455,8 +528,9 @@ bool testCondor(int year, int month, int day,double spot,double v,double r,doubl
 
 FunctionTag gFunctionTable[] =
 {
-	"bsVEuro",	{ bsValueEuropean, 2, 0, 5, 0, NULL },
-	"bsExpiry",	{ bsExpiry, 0, 0, 1, 0, NULL }
+	"bsVEuro",	{ bsValueEuropean, 2, 0, 6, 0, NULL },
+	"bsExpiry",	{ bsExpiry,		   0, 0, 1, 0, NULL },
+	"bsCondor",	{ bsCondor,		   4, 0, 7, 0, NULL }
 };
 
 int gFunctionTableSize = sizeof(gFunctionTable)/sizeof(FunctionTag);
